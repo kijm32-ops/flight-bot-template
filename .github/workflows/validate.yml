@@ -1,0 +1,50 @@
+name: Validate PTIS
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyyaml
+
+      - name: Compile Python sources
+        run: python -m py_compile *.py
+
+      - name: Run unit tests
+        run: python -m unittest
+
+      - name: Parse workflow YAML
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          for path in sorted(Path('.github/workflows').glob('*.yml')):
+              with path.open(encoding='utf-8') as handle:
+                  yaml.safe_load(handle)
+              print(f'parsed {path}')
+          PY
+
+      - name: Check diff whitespace
+        if: github.event_name == 'pull_request'
+        run: git diff --check "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}"
