@@ -391,3 +391,5 @@ python -m unittest
 
 Pull requests also run **Validate PTIS**, which compiles Python, runs unit tests,
 parses workflow YAML, and checks diff whitespace without calling SerpAPI.
+
+<!-- template smoke validation branch -->
