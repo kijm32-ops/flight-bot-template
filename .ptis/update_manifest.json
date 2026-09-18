@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "managed_files": [
+    ".github/workflows/kakao-setup-test.yml",
+    ".github/workflows/ptis-update.yml",
+    ".github/workflows/schedule.yml",
+    ".github/workflows/validate.yml",
+    ".gitignore",
+    ".ptis/update_manifest.json",
+    "PTIS_VERSION",
+    "README.md",
+    "assets/kakao_card_v1.png",
+    "carryover.py",
+    "config.py",
+    "exposure.py",
+    "focus.py",
+    "install_ptis.py",
+    "kakao_auth.py",
+    "main.py",
+    "models.py",
+    "normalizer.py",
+    "notifier.py",
+    "origin_compare.py",
+    "report_generator.py",
+    "requirements.txt",
+    "route_watch.py",
+    "search.py",
+    "selection.py",
+    "setup_kakao.py",
+    "setup_windows.ps1",
+    "state.py",
+    "test_carryover.py",
+    "test_focus.py",
+    "test_install_ptis.py",
+    "test_kakao_auth.py",
+    "test_route_watch.py",
+    "test_setup_kakao.py",
+    "test_update_ptis.py",
+    "update_ptis.py",
+    "valuation.py"
+  ],
+  "seed_if_missing": [
+    "user_config.json"
+  ],
+  "protected_files": [
+    "data/state.json",
+    "data/kakao_auth.json",
+    "user_config.json"
+  ],
+  "remove_files": []
+}
