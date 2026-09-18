@@ -1,0 +1,57 @@
+name: Kakao Setup Verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  send-test-message:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify encrypted OAuth setup and send Kakao test message
+        env:
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+          KAKAO_TOKEN_ENCRYPTION_KEY: ${{ secrets.KAKAO_TOKEN_ENCRYPTION_KEY }}
+        run: |
+          python - <<'PY'
+          from datetime import date, timedelta
+
+          from models import Flight
+          from notifier import send_kakao_message
+
+          depart_date = date.today() + timedelta(days=30)
+          deal = Flight(
+              origin="ICN",
+              destination="TEST",
+              destination_name="Kakao setup test",
+              destination_country="Test",
+              depart_date=depart_date,
+              return_date=depart_date + timedelta(days=3),
+              price=100000,
+              average_price=200000,
+              discount_percentage=50,
+              airline="TEST",
+              duration=60,
+              stops=0,
+              booking_link="https://example.com/flight",
+              value_ratio=0.5,
+              value_grade="TEST",
+          )
+
+          if not send_kakao_message([deal]):
+              raise SystemExit("Kakao setup verification failed")
+          PY
