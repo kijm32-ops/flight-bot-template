@@ -174,12 +174,12 @@ test.
 The Kakao delivery endpoint sends only to the OAuth user's own My Chatroom. PTIS
 does not request the separate friend-message permission.
 
-PTIS v1.6 can now build a verified clean distribution artifact from the upstream
-source. The artifact contains only centrally managed program files plus safe seed
-configuration; it excludes runtime/auth files such as `data/state.json` and
-`data/kakao_auth.json`. The separate `flight-bot-template` repository still
-requires a one-time repository-administration step, but its contents can be taken
-directly from the **Build Clean PTIS Template** artifact.
+PTIS v1.6 builds a verified clean distribution from the upstream source. The
+artifact contains only centrally managed program files plus safe seed configuration
+and excludes runtime/auth files such as `data/state.json` and
+`data/kakao_auth.json`. The clean distribution repository is
+`kijm32-ops/flight-bot-template`; new installations should be created from that
+repository instead of copying the live upstream installation.
 
 ## Clean template distribution
 
@@ -201,9 +201,11 @@ runtime/auth files. The generated artifact intentionally excludes:
 - generated Pages output, caches, virtualenvs, and Git metadata
 
 The **Build Clean PTIS Template** GitHub Actions workflow produces the same verified
-zip artifact without SerpAPI calls. After the separate
-`kijm32-ops/flight-bot-template` repository is created, initialize it from this
-artifact and enable GitHub's template-repository setting there.
+zip artifact without SerpAPI calls. The initialized
+`kijm32-ops/flight-bot-template` repository was smoke-tested with the bundled
+validation workflow. Keep GitHub's **Template repository** setting enabled there.
+Future PTIS program versions can reach that repository through the bundled
+review-only PTIS update workflow without copying upstream runtime state.
 
 ## Troubleshooting
 
