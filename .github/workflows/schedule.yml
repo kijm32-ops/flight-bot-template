@@ -1,0 +1,67 @@
+name: Daily Flight Deal Scraper
+
+on:
+  schedule:
+    # UTC 22:00 = KST 익일 07:00 (UTC 금 22시 = KST 토 07시 → 심층 검색일)
+    - cron: '0 22 * * *'
+  workflow_dispatch:
+    inputs:
+      force_deep_scan:
+        description: '심층 검색 강제 실행 (토요일이 아니어도 deep 프로필 포함)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 저장소 코드 불러오기
+        uses: actions/checkout@v4
+
+      - name: 파이썬 환경 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 필요한 라이브러리 설치
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 특가 수집 스크립트 실행
+        env:
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_PASSWORD: ${{ secrets.GMAIL_PASSWORD }}
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+          KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
+          KAKAO_TOKEN_ENCRYPTION_KEY: ${{ secrets.KAKAO_TOKEN_ENCRYPTION_KEY }}
+          KAKAO_JS_KEY: ${{ secrets.KAKAO_JS_KEY }}
+          FORCE_DEEP_SCAN: ${{ inputs.force_deep_scan && '1' || '0' }}
+        run: python main.py
+
+      - name: 상태 데이터 저장소에 커밋
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/state.json
+          test ! -f data/kakao_auth.json || git add data/kakao_auth.json
+          git diff --staged --quiet || git commit -m "chore: 상태 데이터 갱신 [skip ci]"
+          git push
+
+      - name: Pages 아티팩트 업로드
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: GitHub Pages 배포
+        id: deployment
+        uses: actions/deploy-pages@v4
