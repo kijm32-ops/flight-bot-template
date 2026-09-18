@@ -1,0 +1,11 @@
+{
+  "focus_slot": {
+    "mode": "alternate"
+  },
+  "focus_search": {
+    "enabled": false
+  },
+  "route_watch": {
+    "enabled": false
+  }
+}
