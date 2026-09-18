@@ -1,0 +1,80 @@
+name: PTIS Update Check
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 1 * * 1'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    if: github.repository != 'kijm32-ops/flight-bot'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out installed repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Apply upstream PTIS update
+        run: python update_ptis.py --apply --yes
+
+      - name: Detect update
+        id: update
+        shell: bash
+        run: |
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          version="$(tr -d '[:space:]' < PTIS_VERSION)"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Commit update branch
+        if: steps.update.outputs.changed == 'true'
+        id: commit
+        shell: bash
+        run: |
+          version="${{ steps.update.outputs.version }}"
+          branch="ptis-update-v${version//./-}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add -A
+          git commit -m "chore: update PTIS to v$version"
+          git push --force-with-lease origin "$branch"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Open update pull request
+        if: steps.update.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATE_BRANCH: ${{ steps.commit.outputs.branch }}
+          PTIS_VERSION: ${{ steps.update.outputs.version }}
+          BASE_BRANCH: ${{ github.event.repository.default_branch }}
+        shell: bash
+        run: |
+          existing="$(gh pr list --state open --head "$UPDATE_BRANCH" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            echo "PTIS update PR #$existing is already open."
+            exit 0
+          fi
+
+          body="Automated PTIS program update to v${PTIS_VERSION}.
+
+          This PR is intentionally review-only. It does not update data/state.json,
+          data/kakao_auth.json, an existing user_config.json, or repository Secrets."
+
+          if ! gh pr create             --base "$BASE_BRANCH"             --head "$UPDATE_BRANCH"             --title "Update PTIS to v${PTIS_VERSION}"             --body "$body"; then
+            echo "::warning::The update branch was pushed, but GitHub Actions could not create the PR."
+            echo "::warning::Open a pull request from $UPDATE_BRANCH into $BASE_BRANCH manually."
+          fi
