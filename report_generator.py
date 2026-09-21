@@ -120,7 +120,7 @@ def generate_report_html(
         "\uB178\uC120\uAC10\uC2DC \uC870\uAC74\uC5D0 \uB9DE\uB294 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.",
     )
     route_watch_section = ""
-    if route_watch_deals:
+    if route_watch_deals or route_watch_label:
         route_watch_section = f"""
         <section class='route-box'>
           <h2>\U0001F4CD \uB178\uC120\uAC10\uC2DC ({len(route_watch_deals)}\uAC74)</h2>

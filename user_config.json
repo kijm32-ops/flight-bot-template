@@ -7,5 +7,6 @@
   },
   "route_watch": {
     "enabled": false
-  }
+  },
+  "route_watches": []
 }

@@ -263,11 +263,11 @@ If the entire focus date window has passed, Focus Search is skipped automaticall
 and the normal `GMP/near` discovery slot is restored. Invalid Focus settings also
 disable only Focus for that run; the discovery pipeline continues.
 
-## Exact Route Watch
+## Multi Route Watch
 
-Route Watch monitors one exact airport pair and exact round-trip dates with the
-SerpAPI `google_flights` engine. It shares the same one-per-day user-intent slot
-used by Region Focus, so it does not add a new scheduled API call.
+Route Watch monitors exact airport pairs and exact round-trip dates with the
+SerpAPI `google_flights` engine. Region Focus and every active Route Watch share
+one user-intent slot per KST day, so this feature adds no scheduled API calls.
 
 Example `user_config.json`:
 
@@ -294,16 +294,40 @@ Example `user_config.json`:
     "return_date": "2026-10-06",
     "max_price": 300000,
     "nonstop_only": true
+  },
+  "route_watches": [
+    {
+      "name": "Osaka weekend",
+      "enabled": true,
+      "origin": "ICN",
+      "destination": "KIX",
+      "outbound_date": "2026-11-06",
+      "return_date": "2026-11-08",
+      "max_price": 280000,
+      "nonstop_only": true
+    }
   }
 }
 ```
 
-`focus_slot.mode` controls which user-intent search gets the single daily slot
-when both are active:
+`route_watches` is the v1.7 list form. Entries are evaluated in JSON order;
+invalid or expired entries are excluded without disabling valid entries. The
+v1.4 single `route_watch` object remains supported and is treated as the first
+Route Watch when enabled, so existing user configuration remains valid.
 
-- `alternate` (default): alternate Region Focus and Route Watch by KST date;
-- `route_first`: always prefer Route Watch while it is active;
-- `region_first`: always prefer Region Focus while it is active.
+PTIS selects exactly one active intent by `KST date ordinal % active intents`.
+This is deterministic, needs no saved scheduler state, and guarantees that every
+unchanged active intent receives one slot in each complete rotation. Adding or
+removing a Route Watch changes only the configured candidate list, so future
+dates remain directly predictable from that order.
+
+`focus_slot.mode` retains its existing setting names as candidate ordering:
+
+- `alternate` (default) and `route_first`: Route Watches first, then Region Focus;
+- `region_first`: Region Focus first, then Route Watches.
+
+These modes are ordering controls rather than strict priorities in v1.7. Strict
+priority would starve other active intents and is therefore not used.
 
 If only one feature is active, that feature gets the slot. If neither is active,
 the original `GMP/near` discovery task is restored.
@@ -315,16 +339,16 @@ round-trip price at this stage. Return-flight choice details and booking-token
 lookups are outside v1.4.
 
 Route Watch results do not compete with Discovery carryover, quota, or exposure
-demotion. They are displayed before Region Focus and Discovery in Kakao and on the
-Pages report. An invalid or expired Route Watch disables only that watch for the
-current run.
+demotion. Kakao and Pages show the exact Route Watch label selected that day before
+Region Focus and Discovery. An invalid or expired Route Watch disables only that
+watch for the current run.
 
 ## Schedule and API budget
 
 The normal workflow still runs every day at UTC 22:00 (KST 07:00). Region Focus
-and Exact Route Watch share one replacement slot rather than adding calls, so the
+and Multi Route Watch share one replacement slot rather than adding calls, so the
 normal schedule remains about **221 calls/month** (7 daily tasks plus the weekly
-deep task) against the 235-call safety budget. v1.4 adds **0 net scheduled SerpAPI
+deep task) against the 235-call safety budget. v1.7 adds **0 net scheduled SerpAPI
 calls**.
 
 ## Updating an installed PTIS repository

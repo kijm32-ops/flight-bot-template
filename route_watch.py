@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from config import KST, TARGET_ORIGINS
 from focus import USER_CONFIG_FILE
@@ -29,12 +29,14 @@ class RouteWatchConfig:
     return_date: date
     max_price: Optional[int] = None
     nonstop_only: bool = False
+    name: str = ""
 
     @property
     def label(self) -> str:
         suffix = " / nonstop" if self.nonstop_only else ""
+        prefix = f"{self.name}: " if self.name else ""
         return (
-            f"{self.origin}->{self.destination} / "
+            f"{prefix}{self.origin}->{self.destination} / "
             f"{self.outbound_date}..{self.return_date}{suffix}"
         )
 
@@ -82,47 +84,44 @@ def _positive_int(value: Any, name: str) -> int:
     return value
 
 
-def parse_route_watch_config(
-    payload: Any,
+def _parse_route_watch(
+    raw: Any,
+    field_name: str,
     now: Optional[datetime] = None,
 ) -> Optional[RouteWatchConfig]:
-    if not isinstance(payload, dict):
-        raise RouteWatchConfigError("user_config.json must contain a JSON object.")
-
-    raw = payload.get("route_watch", {})
     if not isinstance(raw, dict):
-        raise RouteWatchConfigError("route_watch must be a JSON object.")
+        raise RouteWatchConfigError(f"{field_name} must be a JSON object.")
 
     enabled = raw.get("enabled", False)
     if type(enabled) is not bool:
-        raise RouteWatchConfigError("route_watch.enabled must be true or false.")
+        raise RouteWatchConfigError(f"{field_name}.enabled must be true or false.")
     if not enabled:
         return None
 
-    origin = _airport_code(raw.get("origin"), "route_watch.origin")
+    origin = _airport_code(raw.get("origin"), f"{field_name}.origin")
     if origin not in TARGET_ORIGINS:
         raise RouteWatchConfigError(
-            "route_watch.origin must be one of: " + ", ".join(TARGET_ORIGINS)
+            f"{field_name}.origin must be one of: " + ", ".join(TARGET_ORIGINS)
         )
 
     destination = _airport_code(
         raw.get("destination"),
-        "route_watch.destination",
+        f"{field_name}.destination",
     )
     if destination == origin:
-        raise RouteWatchConfigError("route_watch.destination must differ from origin.")
+        raise RouteWatchConfigError(f"{field_name}.destination must differ from origin.")
 
     outbound_date = _parse_date(
         raw.get("outbound_date"),
-        "route_watch.outbound_date",
+        f"{field_name}.outbound_date",
     )
     return_date = _parse_date(
         raw.get("return_date"),
-        "route_watch.return_date",
+        f"{field_name}.return_date",
     )
     if return_date <= outbound_date:
         raise RouteWatchConfigError(
-            "route_watch.return_date must be after outbound_date."
+            f"{field_name}.return_date must be after outbound_date."
         )
 
     today = (now or datetime.now(KST)).astimezone(KST).date()
@@ -136,14 +135,18 @@ def parse_route_watch_config(
     max_price = raw.get("max_price")
     parsed_max_price = None if max_price is None else _positive_int(
         max_price,
-        "route_watch.max_price",
+        f"{field_name}.max_price",
     )
 
     nonstop_only = raw.get("nonstop_only", False)
     if type(nonstop_only) is not bool:
         raise RouteWatchConfigError(
-            "route_watch.nonstop_only must be true or false."
+            f"{field_name}.nonstop_only must be true or false."
         )
+
+    name = raw.get("name", "")
+    if not isinstance(name, str):
+        raise RouteWatchConfigError(f"{field_name}.name must be a string.")
 
     return RouteWatchConfig(
         origin=origin,
@@ -152,7 +155,49 @@ def parse_route_watch_config(
         return_date=return_date,
         max_price=parsed_max_price,
         nonstop_only=nonstop_only,
+        name=name.strip(),
     )
+
+
+def parse_route_watch_config(
+    payload: Any,
+    now: Optional[datetime] = None,
+) -> Optional[RouteWatchConfig]:
+    """Parse the v1.4 single-route shape for backward compatibility."""
+    if not isinstance(payload, dict):
+        raise RouteWatchConfigError("user_config.json must contain a JSON object.")
+    return _parse_route_watch(payload.get("route_watch", {}), "route_watch", now)
+
+
+def parse_route_watch_configs(
+    payload: Any,
+    now: Optional[datetime] = None,
+) -> List[RouteWatchConfig]:
+    """Parse v1.7 route_watches plus the legacy v1.4 route_watch object."""
+    if not isinstance(payload, dict):
+        raise RouteWatchConfigError("user_config.json must contain a JSON object.")
+
+    configs: List[RouteWatchConfig] = []
+    legacy = _parse_route_watch(payload.get("route_watch", {}), "route_watch", now)
+    if legacy is not None:
+        configs.append(legacy)
+
+    raw_watches = payload.get("route_watches", [])
+    if raw_watches is None:
+        raw_watches = []
+    if not isinstance(raw_watches, list):
+        raise RouteWatchConfigError("route_watches must be a JSON array.")
+
+    for index, raw in enumerate(raw_watches):
+        field_name = f"route_watches[{index}]"
+        try:
+            config = _parse_route_watch(raw, field_name, now)
+        except RouteWatchConfigError as exc:
+            logging.warning("Route Watch disabled for this run: %s", exc)
+            continue
+        if config is not None:
+            configs.append(config)
+    return configs
 
 
 def load_route_watch_config(
@@ -170,6 +215,23 @@ def load_route_watch_config(
     except (OSError, json.JSONDecodeError, RouteWatchConfigError) as exc:
         logging.warning("Route Watch disabled for this run: %s", exc)
         return None
+
+
+def load_route_watch_configs(
+    path: Path = USER_CONFIG_FILE,
+    now: Optional[datetime] = None,
+) -> List[RouteWatchConfig]:
+    if not path.exists():
+        return []
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        configs = parse_route_watch_configs(payload, now=now)
+        for config in configs:
+            logging.info("Route Watch active: %s", config.label)
+        return configs
+    except (OSError, json.JSONDecodeError, RouteWatchConfigError) as exc:
+        logging.warning("Route Watches disabled for this run: %s", exc)
+        return []
 
 
 def load_focus_slot_mode(path: Path = USER_CONFIG_FILE) -> str:
@@ -194,29 +256,33 @@ def load_focus_slot_mode(path: Path = USER_CONFIG_FILE) -> str:
     return mode
 
 
+@dataclass(frozen=True)
+class UserIntent:
+    kind: str
+    config: Any
+
+
 def choose_user_intent(
-    focus_config,
-    route_config: Optional[RouteWatchConfig],
+    focus_config: Any,
+    route_configs: Sequence[RouteWatchConfig],
     mode: str,
     now: Optional[datetime] = None,
-) -> Optional[str]:
-    has_focus = focus_config is not None
-    has_route = route_config is not None
-
-    if has_focus and not has_route:
-        return "focus"
-    if has_route and not has_focus:
-        return "route"
-    if not has_focus and not has_route:
+) -> Optional[UserIntent]:
+    """Select one active user intent using a KST date-only, state-free rotation."""
+    routes = list(route_configs)
+    if focus_config is None and not routes:
         return None
-
-    if mode == "route_first":
-        return "route"
-    if mode == "region_first":
-        return "focus"
-
     current = (now or datetime.now(KST)).astimezone(KST).date()
-    return "route" if current.toordinal() % 2 == 0 else "focus"
+    route_intents = [UserIntent("route", config) for config in routes]
+    focus_intent = UserIntent("focus", focus_config) if focus_config else None
+
+    # Modes retain their v1.6 setting names as deterministic list-order choices.
+    # They are not strict priorities: strict priority would starve another active intent.
+    if mode == "region_first":
+        candidates = ([focus_intent] if focus_intent else []) + route_intents
+    else:
+        candidates = route_intents + ([focus_intent] if focus_intent else [])
+    return candidates[current.toordinal() % len(candidates)]
 
 
 def route_watch_flight(

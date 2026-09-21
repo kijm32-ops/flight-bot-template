@@ -194,6 +194,7 @@ def send_kakao_message(
     deals: List[Flight],
     focus_deals: List[Flight] = None,
     route_watch_deals: List[Flight] = None,
+    route_watch_label: str = "",
 ) -> bool:
     """
     카카오톡 '나에게 보내기'로 특가 요약 알림 발송.
@@ -243,9 +244,10 @@ def send_kakao_message(
             f"{d.depart_date.strftime('%m/%d')} {nights}\uBC15{nights+1}\uC77C"
         )
 
-    if route_watch_deals:
+    if route_watch_label:
+        route_label = f" ({route_watch_label})" if route_watch_label else ""
         title = (
-            f"\u2708\uFE0F \uB178\uC120\uAC10\uC2DC {len(route_watch_deals)}\uAC74"
+            f"\u2708\uFE0F \uB178\uC120\uAC10\uC2DC{route_label} {len(route_watch_deals)}\uAC74"
             f" \u00B7 \uAD00\uC2EC\uAC80\uC0C9 {len(focus_deals)}\uAC74"
             f" \u00B7 \uD2B9\uAC00 {len(deals)}\uAC74"
         )
