@@ -151,31 +151,82 @@ class RouteWatchSlotTests(unittest.TestCase):
         )
         self.route = route_watch.parse_route_watch_config(valid_payload(), now=NOW)
 
-    def test_route_first_selects_route(self):
+    def test_route_first_orders_route_before_focus(self):
         self.assertEqual(
             route_watch.choose_user_intent(
-                self.focus, self.route, "route_first", now=NOW
-            ),
+                self.focus, [self.route], "route_first", now=NOW + timedelta(days=1)
+            ).kind,
             "route",
         )
 
-    def test_region_first_selects_focus(self):
+    def test_region_first_orders_focus_before_route(self):
         self.assertEqual(
             route_watch.choose_user_intent(
-                self.focus, self.route, "region_first", now=NOW
-            ),
+                self.focus, [self.route], "region_first", now=NOW + timedelta(days=1)
+            ).kind,
             "focus",
         )
 
     def test_alternate_switches_on_adjacent_days(self):
         first = route_watch.choose_user_intent(
-            self.focus, self.route, "alternate", now=NOW
+            self.focus, [self.route], "alternate", now=NOW
         )
         second = route_watch.choose_user_intent(
-            self.focus, self.route, "alternate", now=NOW + timedelta(days=1)
+            self.focus, [self.route], "alternate", now=NOW + timedelta(days=1)
         )
-        self.assertNotEqual(first, second)
-        self.assertEqual({first, second}, {"focus", "route"})
+        self.assertNotEqual(first.kind, second.kind)
+        self.assertEqual({first.kind, second.kind}, {"focus", "route"})
+
+    def test_multi_route_rotation_is_kst_deterministic_and_starvation_free(self):
+        second = route_watch.parse_route_watch_config(
+            {
+                "route_watch": {
+                    "enabled": True,
+                    "origin": "ICN",
+                    "destination": "KIX",
+                    "outbound_date": "2026-10-10",
+                    "return_date": "2026-10-13",
+                }
+            },
+            now=NOW,
+        )
+        candidates = [self.route, second]
+        selected = [
+            route_watch.choose_user_intent(
+                self.focus, candidates, "alternate", now=NOW + timedelta(days=offset)
+            )
+            for offset in range(3)
+        ]
+        self.assertEqual({intent.kind for intent in selected}, {"focus", "route"})
+        self.assertEqual(
+            {intent.config.destination for intent in selected if intent.kind == "route"},
+            {"NRT", "KIX"},
+        )
+        self.assertEqual(
+            selected[0],
+            route_watch.choose_user_intent(self.focus, candidates, "alternate", now=NOW),
+        )
+
+    def test_invalid_and_expired_routes_are_excluded_without_disabling_valid_routes(self):
+        payload = valid_payload()
+        payload["route_watches"] = [
+            {"enabled": True, "origin": "ICN", "destination": "TOKYO"},
+            {
+                "enabled": True,
+                "origin": "ICN",
+                "destination": "KIX",
+                "outbound_date": "2026-09-17",
+                "return_date": "2026-09-20",
+            },
+        ]
+        configs = route_watch.parse_route_watch_configs(payload, now=NOW)
+        self.assertEqual(len(configs), 1)
+        self.assertEqual(configs[0].destination, "NRT")
+
+    def test_legacy_single_route_config_remains_supported(self):
+        configs = route_watch.parse_route_watch_configs(valid_payload(), now=NOW)
+        self.assertEqual(len(configs), 1)
+        self.assertEqual(configs[0], self.route)
 
     def test_route_only_uses_existing_single_focus_slot(self):
         tasks = main.build_tasks(20, False, focus_active=True)
@@ -265,6 +316,7 @@ class RouteWatchOutputTests(unittest.TestCase):
             text = Path(tmp, "index.html").read_text(encoding="utf-8")
 
         self.assertIn("\U0001F4CD \uB178\uC120\uAC10\uC2DC", text)
+        self.assertIn("ICN-&gt;NRT / 2026-10-03..2026-10-06", text)
         self.assertLess(text.index("Narita"), text.index("Tokyo"))
         self.assertLess(text.index("Tokyo"), text.index("Osaka"))
 
@@ -298,6 +350,7 @@ class RouteWatchOutputTests(unittest.TestCase):
                     [discovery],
                     focus_deals=[focus_deal],
                     route_watch_deals=[route_deal],
+                    route_watch_label="Tokyo: ICN->NRT / 2026-10-03..2026-10-06",
                 )
             )
 
@@ -305,10 +358,24 @@ class RouteWatchOutputTests(unittest.TestCase):
             post.call_args.kwargs["data"]["template_object"]
         )
         description = payload["content"]["description"]
-        self.assertIn("\uB178\uC120\uAC10\uC2DC 1\uAC74", payload["content"]["title"])
+        self.assertIn("\uB178\uC120\uAC10\uC2DC (Tokyo: ICN->NRT / 2026-10-03..2026-10-06) 1\uAC74", payload["content"]["title"])
         self.assertTrue(description.startswith("\U0001F4CD"))
         self.assertLess(description.index("Narita"), description.index("Tokyo"))
         self.assertLess(description.index("Tokyo"), description.index("Osaka"))
+
+    def test_pages_shows_selected_route_even_without_a_matching_fare(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(report_generator, "OUTPUT_DIR", tmp), \
+             patch.object(report_generator, "OUTPUT_FILE", str(Path(tmp) / "index.html")):
+            report_generator.generate_report_html(
+                [],
+                "",
+                route_watch_label="Osaka: ICN->KIX / 2026-11-06..2026-11-08",
+            )
+            text = Path(tmp, "index.html").read_text(encoding="utf-8")
+
+        self.assertIn("\uB178\uC120\uAC10\uC2DC \uC870\uAC74\uC5D0 \uB9DE\uB294 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.", text)
+        self.assertIn("Osaka: ICN-&gt;KIX / 2026-11-06..2026-11-08", text)
 
 
 if __name__ == "__main__":

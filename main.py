@@ -26,7 +26,7 @@ from route_watch import (
     RouteWatchConfig,
     choose_user_intent,
     load_focus_slot_mode,
-    load_route_watch_config,
+    load_route_watch_configs,
     route_watch_flight,
 )
 from selection import (
@@ -184,15 +184,20 @@ def run_system():
 
     state = load_state()
     focus_config = load_focus_config()
-    route_config = load_route_watch_config()
+    route_configs = load_route_watch_configs()
     focus_slot_mode = load_focus_slot_mode()
     user_intent = choose_user_intent(
         focus_config,
-        route_config,
+        route_configs,
         focus_slot_mode,
     )
     if user_intent:
-        logging.info("User-intent slot: %s (%s)", user_intent, focus_slot_mode)
+        logging.info(
+            "User-intent slot: %s (%s): %s",
+            user_intent.kind,
+            focus_slot_mode,
+            user_intent.config.label,
+        )
 
     deep_scan = is_deep_scan_day()
     if deep_scan:
@@ -234,10 +239,10 @@ def run_system():
         for origin, profile in tasks:
             task = (origin, profile)
             if task == FOCUS_TASK:
-                if user_intent == "route" and route_config is not None:
-                    future = executor.submit(process_route_watch, route_config)
-                elif user_intent == "focus" and focus_config is not None:
-                    future = executor.submit(process_focus, focus_config)
+                if user_intent and user_intent.kind == "route":
+                    future = executor.submit(process_route_watch, user_intent.config)
+                elif user_intent and user_intent.kind == "focus":
+                    future = executor.submit(process_focus, user_intent.config)
                 else:
                     continue
             else:
@@ -248,7 +253,7 @@ def run_system():
             task = future_to_task[future]
             try:
                 result = future.result()
-                if task == FOCUS_TASK and user_intent == "route":
+                if task == FOCUS_TASK and user_intent and user_intent.kind == "route":
                     route_watch_flights.extend(result)
                 elif task == FOCUS_TASK:
                     flights, stats = result
@@ -303,9 +308,9 @@ def run_system():
         KAKAO_JS_KEY,
         low_price_keys,
         focus_deals=focus_flights,
-        focus_label=focus_config.label if focus_config else "",
+        focus_label=user_intent.config.label if user_intent and user_intent.kind == "focus" else "",
         route_watch_deals=route_watch_flights,
-        route_watch_label=route_config.label if route_config else "",
+        route_watch_label=user_intent.config.label if user_intent and user_intent.kind == "route" else "",
     )
 
     if all_final_flights or focus_flights or route_watch_flights:
@@ -317,6 +322,7 @@ def run_system():
             all_final_flights,
             focus_deals=focus_flights,
             route_watch_deals=route_watch_flights,
+            route_watch_label=user_intent.config.label if user_intent and user_intent.kind == "route" else "",
         )
         need_warning = record_kakao_result(state, kakao_success)
         if need_warning:
