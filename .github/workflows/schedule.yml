@@ -17,7 +17,28 @@ permissions:
   id-token: write
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    outputs:
+      configured: ${{ steps.setup-check.outputs.configured }}
+    steps:
+      - name: PTIS 설정 확인
+        id: setup-check
+        env:
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+        run: |
+          if [ -z "$SERPAPI_KEY" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "PTIS is not configured yet: SERPAPI_KEY is missing, so the bot run is skipped."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
   run-bot:
+    needs: preflight
+    if: ${{ needs.preflight.outputs.configured == 'true' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
