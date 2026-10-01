@@ -50,7 +50,6 @@ jobs:
           PY
 
       - name: Build clean template
-        if: hashFiles('build_template.py') != ''
         run: |
           python build_template.py --output /tmp/ptis-template
           test -f /tmp/ptis-template/.github/ISSUE_TEMPLATE/trip-settings.yml
