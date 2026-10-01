@@ -1,0 +1,73 @@
+name: 여행 조건 자동 적용
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: ptis-user-config
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: ${{ github.actor == github.repository_owner && startsWith(github.event.issue.title, '[PTIS 설정]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 현재 설정 불러오기
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Python 준비
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 이슈 입력 검증 후 설정 저장
+        run: python manage_trip_settings.py --issue-event "$GITHUB_EVENT_PATH"
+
+      - name: 설정 반영
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add user_config.json
+          if git diff --staged --quiet; then
+            echo "설정에 변경 사항이 없습니다."
+          else
+            git commit -m "config: 여행 조건 설정 #${{ github.event.issue.number }} [skip ci]"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: 성공 알림 및 요청 닫기
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '✅ PTIS 여행 조건을 저장했습니다. 다음 예약 검색부터 자동 적용됩니다.'
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed'
+            });
+
+      - name: 실패 알림
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: '❌ PTIS 여행 조건 저장에 실패했습니다. 이 요청은 닫지 않았습니다. Actions 로그를 확인하세요.'
+            });

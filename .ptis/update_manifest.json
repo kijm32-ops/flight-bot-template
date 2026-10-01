@@ -1,9 +1,12 @@
 {
   "schema_version": 1,
   "managed_files": [
+    ".github/ISSUE_TEMPLATE/trip-settings.yml",
     ".github/workflows/kakao-setup-test.yml",
     ".github/workflows/ptis-update.yml",
     ".github/workflows/schedule.yml",
+    ".github/workflows/trip-settings-issue.yml",
+    ".github/workflows/trip-settings.yml",
     ".github/workflows/validate.yml",
     ".gitignore",
     ".ptis/update_manifest.json",
@@ -17,6 +20,7 @@
     "install_ptis.py",
     "kakao_auth.py",
     "main.py",
+    "manage_trip_settings.py",
     "models.py",
     "normalizer.py",
     "notifier.py",
@@ -33,6 +37,7 @@
     "test_focus.py",
     "test_install_ptis.py",
     "test_kakao_auth.py",
+    "test_manage_trip_settings.py",
     "test_route_watch.py",
     "test_setup_kakao.py",
     "test_update_ptis.py",

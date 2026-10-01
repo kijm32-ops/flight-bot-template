@@ -33,17 +33,27 @@ jobs:
       - name: Run unit tests
         run: python -m unittest
 
-      - name: Parse workflow YAML
+      - name: Parse GitHub YAML
         run: |
           python - <<'PY'
           from pathlib import Path
           import yaml
 
-          for path in sorted(Path('.github/workflows').glob('*.yml')):
+          paths = [
+              *Path('.github/workflows').glob('*.yml'),
+              *Path('.github/ISSUE_TEMPLATE').glob('*.yml'),
+          ]
+          for path in sorted(paths):
               with path.open(encoding='utf-8') as handle:
                   yaml.safe_load(handle)
               print(f'parsed {path}')
           PY
+
+      - name: Build clean template
+        run: |
+          python build_template.py --output /tmp/ptis-template
+          test -f /tmp/ptis-template/.github/ISSUE_TEMPLATE/trip-settings.yml
+          test -f /tmp/ptis-template/.github/workflows/trip-settings-issue.yml
 
       - name: Check diff whitespace
         if: github.event_name == 'pull_request'

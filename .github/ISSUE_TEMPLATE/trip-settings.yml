@@ -1,0 +1,150 @@
+name: 여행 조건 설정
+description: PTIS 관심검색과 노선감시 조건을 휴대폰에서 설정합니다.
+title: "[PTIS 설정] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        제출하면 PTIS가 설정을 검증한 뒤 `user_config.json`에 반영합니다.
+        저장소 소유자만 실제 설정을 변경할 수 있습니다.
+        제목의 `[PTIS 설정]` 접두사는 수정하지 마세요.
+
+  - type: dropdown
+    id: operation
+    attributes:
+      label: 작업
+      description: 무엇을 할까요?
+      options:
+        - "1. 정확한 여행 일정 추가"
+        - "2. 기존 정확 일정 전체 교체"
+        - "3. 지역·기간 관심검색 설정"
+        - "4. 모든 관심검색 잠시 끄기"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: origin
+    attributes:
+      label: 출발 공항
+      options:
+        - ICN
+        - CJJ
+        - GMP
+    validations:
+      required: true
+
+  - type: dropdown
+    id: destination_choice
+    attributes:
+      label: 목적지/지역
+      description: 정확 일정은 공항, 지역검색은 권역을 선택하세요.
+      options:
+        - "오사카 (KIX)"
+        - "도쿄 (NRT)"
+        - "후쿠오카 (FUK)"
+        - "삿포로 (CTS)"
+        - "타이베이 (TPE)"
+        - "다낭 (DAD)"
+        - "방콕 (BKK)"
+        - "싱가포르 (SIN)"
+        - "괌 (GUM)"
+        - "하와이 (HNL)"
+        - "일본 전체 (Japan)"
+        - "동남아 전체 (Southeast Asia)"
+        - "유럽 전체 (Europe)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: travel_month
+    attributes:
+      label: 여행 시기
+      description: 지역검색은 선택한 달 전체를 검색합니다.
+      options:
+        - "다음 달 (next_1)"
+        - "2개월 후 (next_2)"
+        - "3개월 후 (next_3)"
+        - "4개월 후 (next_4)"
+        - "5개월 후 (next_5)"
+        - "6개월 후 (next_6)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: stay_option
+    attributes:
+      label: 숙박
+      options:
+        - "2박 (2)"
+        - "3박 (3)"
+        - "4박 (4)"
+        - "5박 (5)"
+        - "7박 (7)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: departure_week
+    attributes:
+      label: 출발 주차
+      description: 정확 일정에서 선택한 달의 몇 번째 금요일에 출발할지 정합니다. 지역검색은 무시합니다.
+      options:
+        - "첫째 주 (week_1)"
+        - "둘째 주 (week_2)"
+        - "셋째 주 (week_3)"
+        - "넷째 주 (week_4)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: budget_option
+    attributes:
+      label: 예산
+      options:
+        - "제한 없음 (0)"
+        - "20만원 (200000)"
+        - "30만원 (300000)"
+        - "40만원 (400000)"
+        - "50만원 (500000)"
+        - "70만원 (700000)"
+        - "100만원 (1000000)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: nonstop_only
+    attributes:
+      label: 직항 여부
+      description: 정확 일정에서만 적용됩니다.
+      options:
+        - "예 (true)"
+        - "아니오 (false)"
+    validations:
+      required: true
+
+  - type: input
+    id: custom_destination
+    attributes:
+      label: 직접 목적지
+      description: 목록에 없는 공항코드 또는 지역명만 입력하세요. 보통은 비워둡니다.
+      placeholder: "예: CDG"
+
+  - type: input
+    id: custom_outbound
+    attributes:
+      label: 직접 시작일
+      description: 직접 지정할 출발일 또는 검색 시작일입니다. 비워두면 선택값으로 자동 계산합니다.
+      placeholder: "YYYY-MM-DD"
+
+  - type: input
+    id: custom_return
+    attributes:
+      label: 직접 종료일
+      description: 직접 지정할 귀국일 또는 검색 종료일입니다. 비워두면 선택값으로 자동 계산합니다.
+      placeholder: "YYYY-MM-DD"
+
+  - type: markdown
+    attributes:
+      value: |
+        **Submit new issue**를 누르면 설정 적용을 시작합니다.
+        성공하면 이 요청은 자동으로 닫힙니다.
