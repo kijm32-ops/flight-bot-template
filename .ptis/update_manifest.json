@@ -13,6 +13,7 @@
     "PTIS_VERSION",
     "README.md",
     "assets/kakao_card_v1.png",
+    "build_template.py",
     "carryover.py",
     "config.py",
     "exposure.py",
