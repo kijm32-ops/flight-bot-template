@@ -8,7 +8,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from config import (
     GMAIL_USER, GMAIL_PASSWORD, KAKAO_CARD_IMAGE_URL, KAKAO_CLIENT_SECRET,
-    KAKAO_REST_API_KEY, KAKAO_TOKEN_ENCRYPTION_KEY, PAGE_URL,
+    KAKAO_REST_API_KEY, KAKAO_TOKEN_ENCRYPTION_KEY, PAGE_URL, TRIP_SETTINGS_URL,
 )
 from kakao_auth import KakaoAuthError, load_refresh_token, store_refresh_token
 from models import Flight
@@ -193,6 +193,8 @@ def refresh_kakao_access_token() -> str:
 def send_kakao_message(
     deals: List[Flight],
     focus_deals: List[Flight] = None,
+    focus_label: str = "",
+    focus_status: str = "",
     route_watch_deals: List[Flight] = None,
     route_watch_label: str = "",
 ) -> bool:
@@ -202,7 +204,13 @@ def send_kakao_message(
     """
     focus_deals = focus_deals or []
     route_watch_deals = route_watch_deals or []
-    if not deals and not focus_deals and not route_watch_deals:
+    if (
+        not deals
+        and not focus_deals
+        and not route_watch_deals
+        and not focus_label
+        and not focus_status
+    ):
         return True  # 보낼 게 없는 것은 실패가 아님
 
     if not PAGE_URL or not KAKAO_CARD_IMAGE_URL:
@@ -218,6 +226,11 @@ def send_kakao_message(
 
     # 2단계: Route Watch -> Region Focus -> Discovery 순으로 최대 3건 요약한다.
     summary_lines = []
+
+    if focus_label and not focus_deals:
+        summary_lines.append(f"\U0001F3AF {focus_label}")
+        if focus_status:
+            summary_lines.append(f"\u21B3 {focus_status}")
 
     for d in route_watch_deals[:1]:
         nights = (d.return_date - d.depart_date).days
@@ -251,7 +264,7 @@ def send_kakao_message(
             f" \u00B7 \uAD00\uC2EC\uAC80\uC0C9 {len(focus_deals)}\uAC74"
             f" \u00B7 \uD2B9\uAC00 {len(deals)}\uAC74"
         )
-    elif focus_deals:
+    elif focus_deals or focus_label:
         title = (
             f"\u2708\uFE0F \uAD00\uC2EC\uAC80\uC0C9 {len(focus_deals)}\uAC74"
             f" \u00B7 \uD2B9\uAC00 {len(deals)}\uAC74"
@@ -287,6 +300,16 @@ def send_kakao_message(
             }
         ],
     }
+    if TRIP_SETTINGS_URL:
+        template_object["buttons"].append(
+            {
+                "title": "\uC5EC\uD589 \uC870\uAC74 \uC124\uC815",
+                "link": {
+                    "web_url": TRIP_SETTINGS_URL,
+                    "mobile_web_url": TRIP_SETTINGS_URL,
+                },
+            }
+        )
 
     # 3단계: 나에게 보내기 API 호출
     try:

@@ -467,7 +467,8 @@ def main(argv=None) -> int:
         pages_domain = f"https://{owner}.github.io"
         print("\nBefore continuing, configure your Kakao Developers app:")
         print(f"- Redirect URI: {REDIRECT_URI}")
-        print(f"- Product Link web domain: {pages_domain}")
+        print(f"- Product Link web domain (report): {pages_domain}")
+        print("- Product Link web domain (settings): https://github.com")
         print("- Kakao Login: ON")
         print("- Consent item talk_message: optional or required consent")
         print("- Kakao Login Client Secret: ON")

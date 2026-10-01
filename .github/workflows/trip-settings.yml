@@ -1,0 +1,168 @@
+name: 여행 조건 설정
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: '무엇을 할까요?'
+        required: true
+        type: choice
+        options:
+          - '1. 정확한 여행 일정 추가'
+          - '2. 기존 정확 일정 전체 교체'
+          - '3. 지역·기간 관심검색 설정'
+          - '4. 모든 관심검색 잠시 끄기'
+      origin:
+        description: '출발 공항'
+        required: true
+        default: ICN
+        type: choice
+        options:
+          - ICN
+          - CJJ
+          - GMP
+      destination_choice:
+        description: '어디로 갈까요? (정확 일정은 공항, 지역검색은 권역 선택)'
+        required: true
+        default: '오사카 (KIX)'
+        type: choice
+        options:
+          - '오사카 (KIX)'
+          - '도쿄 (NRT)'
+          - '후쿠오카 (FUK)'
+          - '삿포로 (CTS)'
+          - '타이베이 (TPE)'
+          - '다낭 (DAD)'
+          - '방콕 (BKK)'
+          - '싱가포르 (SIN)'
+          - '괌 (GUM)'
+          - '하와이 (HNL)'
+          - '일본 전체 (Japan)'
+          - '동남아 전체 (Southeast Asia)'
+          - '유럽 전체 (Europe)'
+      travel_month:
+        description: '언제 갈까요? (지역검색은 해당 달 전체를 검색)'
+        required: true
+        default: '다음 달 (next_1)'
+        type: choice
+        options:
+          - '다음 달 (next_1)'
+          - '2개월 후 (next_2)'
+          - '3개월 후 (next_3)'
+          - '4개월 후 (next_4)'
+          - '5개월 후 (next_5)'
+          - '6개월 후 (next_6)'
+      stay_option:
+        description: '몇 박으로 갈까요?'
+        required: true
+        default: '3박 (3)'
+        type: choice
+        options:
+          - '2박 (2)'
+          - '3박 (3)'
+          - '4박 (4)'
+          - '5박 (5)'
+          - '7박 (7)'
+      departure_week:
+        description: '해당 달 몇 번째 금요일에 출발할까요? (지역검색은 무시)'
+        required: true
+        default: '둘째 주 (week_2)'
+        type: choice
+        options:
+          - '첫째 주 (week_1)'
+          - '둘째 주 (week_2)'
+          - '셋째 주 (week_3)'
+          - '넷째 주 (week_4)'
+      budget_option:
+        description: '왕복 항공권 예산'
+        required: true
+        default: '제한 없음 (0)'
+        type: choice
+        options:
+          - '제한 없음 (0)'
+          - '20만원 (200000)'
+          - '30만원 (300000)'
+          - '40만원 (400000)'
+          - '50만원 (500000)'
+          - '70만원 (700000)'
+          - '100만원 (1000000)'
+      nonstop_only:
+        description: '정확 일정에서 직항만 찾기'
+        required: true
+        default: false
+        type: boolean
+      custom_destination:
+        description: '[선택] 목록에 없는 공항코드/지역명만 입력'
+        required: false
+        type: string
+      custom_outbound:
+        description: '[선택] 직접 지정할 출발일/시작일 (YYYY-MM-DD)'
+        required: false
+        type: string
+      custom_return:
+        description: '[선택] 직접 지정할 귀국일/종료일 (YYYY-MM-DD)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ptis-user-config
+  cancel-in-progress: false
+
+jobs:
+  save:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 현재 설정 불러오기
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Python 준비
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 입력 검증 후 설정 저장
+        env:
+          PTIS_OPERATION: ${{ inputs.operation }}
+          PTIS_ORIGIN: ${{ inputs.origin }}
+          PTIS_DESTINATION_CHOICE: ${{ inputs.destination_choice }}
+          PTIS_TRAVEL_MONTH: ${{ inputs.travel_month }}
+          PTIS_STAY_OPTION: ${{ inputs.stay_option }}
+          PTIS_DEPARTURE_WEEK: ${{ inputs.departure_week }}
+          PTIS_BUDGET_OPTION: ${{ inputs.budget_option }}
+          PTIS_NONSTOP_ONLY: ${{ inputs.nonstop_only }}
+          PTIS_CUSTOM_DESTINATION: ${{ inputs.custom_destination }}
+          PTIS_CUSTOM_OUTBOUND: ${{ inputs.custom_outbound }}
+          PTIS_CUSTOM_RETURN: ${{ inputs.custom_return }}
+        run: |
+          args=(
+            --operation "$PTIS_OPERATION"
+            --origin "$PTIS_ORIGIN"
+            --destination-choice "$PTIS_DESTINATION_CHOICE"
+            --travel-month "$PTIS_TRAVEL_MONTH"
+            --stay-option "$PTIS_STAY_OPTION"
+            --departure-week "$PTIS_DEPARTURE_WEEK"
+            --budget-option "$PTIS_BUDGET_OPTION"
+            --custom-destination "$PTIS_CUSTOM_DESTINATION"
+            --custom-outbound "$PTIS_CUSTOM_OUTBOUND"
+            --custom-return "$PTIS_CUSTOM_RETURN"
+          )
+          if [ "$PTIS_NONSTOP_ONLY" = "true" ]; then args+=(--nonstop-only); fi
+          python manage_trip_settings.py "${args[@]}"
+
+      - name: 설정 반영
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add user_config.json
+          if git diff --staged --quiet; then
+            echo "설정에 변경 사항이 없습니다."
+            exit 0
+          fi
+          git commit -m "config: 휴대폰에서 여행 조건 변경 [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main

@@ -114,8 +114,10 @@ Create a Kakao Developers app for the person who will receive messages, then:
 2. Register `http://127.0.0.1:8765/callback` as the Redirect URI.
 3. Enable the `talk_message` consent item.
 4. Enable the Kakao Login Client Secret for the REST API key.
-5. Under Product Link Management, register the Pages web domain printed by the
-   installer, normally `https://YOUR_GITHUB_OWNER.github.io`.
+5. Under Product Link Management, register both the Pages web domain printed by
+   the installer (normally `https://YOUR_GITHUB_OWNER.github.io`) and
+   `https://github.com`. The second domain is required for the Kakao
+   **여행 조건 설정** button to open the GitHub-hosted settings form.
 
 The OAuth browser consent must be completed while signed into the Kakao account
 that should receive PTIS messages.
@@ -257,7 +259,9 @@ in the same request. PTIS therefore expresses a requested stay such as 3-5 days
 inside the region query while keeping the explicit outbound-date window. Focus
 results still pass PTIS normalization and price-safety gates, but they do not
 compete with discovery quota, carryover, or exposure demotion. They appear first
-in Kakao and in a separate Pages section.
+in Kakao and in a separate Pages section. When Focus Search runs but returns zero
+deals, Pages and Kakao still show the active condition and a concise funnel status
+such as the number of candidates removed by the PTIS price cap.
 
 If the entire focus date window has passed, Focus Search is skipped automatically
 and the normal `GMP/near` discovery slot is restored. Invalid Focus settings also
@@ -342,6 +346,38 @@ Route Watch results do not compete with Discovery carryover, quota, or exposure
 demotion. Kakao and Pages show the exact Route Watch label selected that day before
 Region Focus and Discovery. An invalid or expired Route Watch disables only that
 watch for the current run.
+
+## Phone-friendly trip settings
+
+You do not need to edit `user_config.json`. Open the latest PTIS Pages report or
+Kakao message and tap **여행 조건 설정**. After signing in to GitHub when needed,
+the button opens a dedicated PTIS settings form directly; you no longer need to
+open Actions and tap **Run workflow** first.
+
+The direct form supports:
+
+- adding one exact route from popular-airport choices;
+- replacing all exact-route watches with one selected route;
+- setting a region for a selected future month, stay range, and budget;
+- pausing every interest search without deleting the saved entries.
+
+For an exact route, PTIS selects the Friday in the chosen week and calculates
+the return date from the selected stay. For a region search, PTIS searches the
+whole chosen month and turns the stay choice into a small range. Optional custom
+destination/date fields remain available for uncommon trips; most users can leave
+them blank. The direct-flight choice is ignored for region searches.
+
+Submitting the form creates a short-lived settings request in GitHub Issues.
+`.github/workflows/trip-settings-issue.yml` accepts only requests authored by the
+repository owner, validates them with the same `manage_trip_settings.py` logic,
+updates `user_config.json`, and closes the request after a successful save.
+Visitors to a public report cannot change the owner's configuration.
+
+The original **여행 조건 설정** Actions workflow remains available as an
+administrator fallback. Both paths share the same `ptis-user-config` concurrency
+group so simultaneous saves do not race. Invalid airport codes, dates, stays, or
+prices fail without changing the saved configuration. A successful save is used
+automatically by the next scheduled PTIS run.
 
 ## Schedule and API budget
 

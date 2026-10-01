@@ -29,10 +29,18 @@ def _kakao_card_image_url() -> str:
     return ""
 
 
+def _trip_settings_url() -> str:
+    repository = os.environ.get("GITHUB_REPOSITORY", "")
+    if not repository or "/" not in repository:
+        return ""
+    return f"https://github.com/{repository}/issues/new?template=trip-settings.yml"
+
+
 # Deployment URLs have one source: GitHub Actions repository context. PTIS_PAGE_URL
 # and PTIS_KAKAO_CARD_IMAGE_URL are explicit overrides for custom domains or local tests.
 PAGE_URL = os.environ.get("PTIS_PAGE_URL") or _github_pages_url()
 KAKAO_CARD_IMAGE_URL = _kakao_card_image_url()
+TRIP_SETTINGS_URL = os.environ.get("PTIS_TRIP_SETTINGS_URL") or _trip_settings_url()
 
 # 양양(YNY) 제외 — 국제선 노선이 거의 없어 호출 대비 수확이 없음
 TARGET_ORIGINS = ["ICN", "CJJ", "GMP"]

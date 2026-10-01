@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -159,6 +160,40 @@ class FocusSchedulingTests(unittest.TestCase):
         self.assertNotIn("trip_length", params)
         normalize.assert_not_called()
 
+    def test_focus_status_explains_price_cap_zero_result(self):
+        status = main._focus_status_text(
+            Counter({"raw": 5, "drop_over_cap": 5}),
+            deal_count=0,
+            executed=True,
+        )
+        self.assertEqual(
+            "\uC870\uAC74\uAC80\uC0C9 \uC2E4\uD589\uB428 \u00B7 \uD6C4\uBCF4 5\uAC74"
+            " \u00B7 \uC81C\uC678 PTIS \uAC00\uACA9 \uC0C1\uD55C 5\uAC74"
+            " \u00B7 \uCD5C\uC885 \uC801\uD569 0\uAC74",
+            status,
+        )
+
+    def test_focus_display_label_includes_origin_and_budget(self):
+        config = focus.parse_focus_config(
+            {
+                "focus_search": {
+                    "enabled": True,
+                    "origin": "CJJ",
+                    "region": "Japan",
+                    "outbound_from": "2026-10-01",
+                    "outbound_to": "2026-10-31",
+                    "stay_min": 3,
+                    "stay_max": 5,
+                    "max_price": 300000,
+                }
+            },
+            now=NOW,
+        )
+        self.assertEqual(
+            "CJJ \u2192 Japan / 2026-10-01~2026-10-31 / 3~5\uBC15 / \u2264300,000\uC6D0",
+            main._focus_display_label(config),
+        )
+
 
 class FocusOutputTests(unittest.TestCase):
     def test_pages_report_places_focus_section_before_discovery(self):
@@ -177,6 +212,65 @@ class FocusOutputTests(unittest.TestCase):
         self.assertIn("\U0001F3AF \uAD00\uC2EC\uAC80\uC0C9", text)
         self.assertLess(text.index("Tokyo"), text.index("Osaka"))
         self.assertIn("Japan / 2026-10-02..2026-10-11 / 3-5d", text)
+
+    def test_pages_report_shows_zero_result_focus_status(self):
+        discovery = sample_flight("Osaka", 160000)
+        label = "CJJ \u2192 Japan / 2026-10-01~2026-10-31 / 3~5\uBC15 / \u2264300,000\uC6D0"
+        status = (
+            "\uC870\uAC74\uAC80\uC0C9 \uC2E4\uD589\uB428 \u00B7 \uD6C4\uBCF4 5\uAC74"
+            " \u00B7 \uC81C\uC678 PTIS \uAC00\uACA9 \uC0C1\uD55C 5\uAC74"
+            " \u00B7 \uCD5C\uC885 \uC801\uD569 0\uAC74"
+        )
+        with tempfile.TemporaryDirectory() as tmp, \
+             patch.object(report_generator, "OUTPUT_DIR", tmp), \
+             patch.object(report_generator, "OUTPUT_FILE", str(Path(tmp) / "index.html")):
+            report_generator.generate_report_html(
+                [discovery],
+                "",
+                focus_deals=[],
+                focus_label=label,
+                focus_status=status,
+            )
+            text = Path(tmp, "index.html").read_text(encoding="utf-8")
+
+        self.assertIn("\U0001F3AF \uAD00\uC2EC\uAC80\uC0C9 (0\uAC74)", text)
+        self.assertIn(label, text)
+        self.assertIn(status, text)
+        self.assertIn(
+            "\uAD00\uC2EC\uAC80\uC0C9 \uC870\uAC74\uC5D0 \uB9DE\uB294 \uACB0\uACFC\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.",
+            text,
+        )
+
+    def test_kakao_zero_result_focus_is_visible(self):
+        discovery = sample_flight("Osaka", 160000)
+        label = "CJJ \u2192 Japan / 2026-10-01~2026-10-31 / 3~5\uBC15 / \u2264300,000\uC6D0"
+        status = (
+            "\uC870\uAC74\uAC80\uC0C9 \uC2E4\uD589\uB428 \u00B7 \uD6C4\uBCF4 5\uAC74"
+            " \u00B7 \uC81C\uC678 PTIS \uAC00\uACA9 \uC0C1\uD55C 5\uAC74"
+            " \u00B7 \uCD5C\uC885 \uC801\uD569 0\uAC74"
+        )
+        response = Mock()
+        response.json.return_value = {"result_code": 0}
+        response.raise_for_status.return_value = None
+
+        with patch.object(notifier, "PAGE_URL", "https://owner.github.io/repo/"), \
+             patch.object(notifier, "KAKAO_CARD_IMAGE_URL", "https://example.com/card.png"), \
+             patch.object(notifier, "refresh_kakao_access_token", return_value="access"), \
+             patch.object(notifier.requests, "post", return_value=response) as post:
+            self.assertTrue(
+                notifier.send_kakao_message(
+                    [discovery],
+                    focus_deals=[],
+                    focus_label=label,
+                    focus_status=status,
+                )
+            )
+
+        payload = json.loads(post.call_args.kwargs["data"]["template_object"])
+        self.assertIn("\uAD00\uC2EC\uAC80\uC0C9 0\uAC74", payload["content"]["title"])
+        self.assertTrue(payload["content"]["description"].startswith("\U0001F3AF " + label))
+        self.assertIn(status, payload["content"]["description"])
+        self.assertIn("Osaka", payload["content"]["description"])
 
     def test_kakao_focus_result_is_prioritized(self):
         focus_deal = sample_flight("Tokyo")

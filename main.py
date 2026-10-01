@@ -10,7 +10,11 @@ from config import (
     SERPAPI_SAFE_BUDGET, SERPAPI_MONTHLY_LIMIT, API_QUOTA_WARNING_THRESHOLD,
 )
 from search import fetch_google_flights, fetch_raw_flight_deals
-from normalizer import normalize_and_deduplicate, collapse_by_destination, format_funnel
+from normalizer import (
+    normalize_and_deduplicate, collapse_by_destination, format_funnel,
+    STAGE_RAW, STAGE_BAD_DATE, STAGE_TRIP_MIN, STAGE_TRIP_MAX, STAGE_CAP,
+    STAGE_DISCOUNT, STAGE_DOMESTIC, STAGE_ERROR, STAGE_QUALIFIED,
+)
 from notifier import send_email, send_kakao_message, send_warning_email
 from report_generator import generate_report_html
 from state import (
@@ -37,6 +41,62 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 FOCUS_TASK = ("__FOCUS__", "focus")
 FOCUS_REPLACED_TASK = ("GMP", "near")
+FOCUS_SEARCH_FAILED = "focus_search_failed"
+
+FOCUS_DROP_LABELS = (
+    (STAGE_CAP, "PTIS \uAC00\uACA9 \uC0C1\uD55C"),
+    (STAGE_TRIP_MIN, "\uCCB4\uB958\uC77C \uBD80\uC871"),
+    (STAGE_TRIP_MAX, "\uCCB4\uB958\uC77C \uCD08\uACFC"),
+    (STAGE_DISCOUNT, "\uD560\uC778\uC728 \uAE30\uC900"),
+    (STAGE_DOMESTIC, "\uAD6D\uB0B4\uC120 \uCD9C\uBC1C\uC9C0 \uAE30\uC900"),
+    (STAGE_BAD_DATE, "\uB0A0\uC9DC \uC624\uB958"),
+    (STAGE_ERROR, "\uC751\uB2F5 \uCC98\uB9AC \uC624\uB958"),
+)
+
+
+def _focus_display_label(config: FocusConfig) -> str:
+    parts = [
+        f"{config.origin} \u2192 {config.region}",
+        f"{config.outbound_from}~{config.outbound_to}",
+    ]
+    if config.stay_min is not None:
+        if config.stay_min == config.stay_max:
+            parts.append(f"{config.stay_min}\uBC15")
+        else:
+            parts.append(f"{config.stay_min}~{config.stay_max}\uBC15")
+    if config.max_price is not None:
+        parts.append(f"\u2264{config.max_price:,}\uC6D0")
+    return " / ".join(parts)
+
+
+def _focus_status_text(
+    stats: Counter,
+    deal_count: int,
+    executed: bool,
+) -> str:
+    if not executed:
+        return "\uC774\uBC88 \uC2E4\uD589\uC740 API \uC608\uC0B0 \uC6B0\uC120\uC21C\uC704\uB85C \uC0DD\uB7B5\uB428"
+    if stats.get(FOCUS_SEARCH_FAILED, 0):
+        return "\uC870\uAC74\uAC80\uC0C9 \uC2E4\uD589 \uC2E4\uD328 \u00B7 Actions \uB85C\uADF8 \uD655\uC778 \uD544\uC694"
+
+    raw = stats.get(STAGE_RAW, 0)
+    if raw == 0:
+        return "\uC870\uAC74\uAC80\uC0C9 \uC2E4\uD589\uB428 \u00B7 \uD6C4\uBCF4 0\uAC74"
+
+    parts = [f"\uC870\uAC74\uAC80\uC0C9 \uC2E4\uD589\uB428 \u00B7 \uD6C4\uBCF4 {raw}\uAC74"]
+    drops = [
+        f"{label} {stats.get(stage, 0)}\uAC74"
+        for stage, label in FOCUS_DROP_LABELS
+        if stats.get(stage, 0)
+    ]
+    if drops:
+        parts.append("\uC81C\uC678 " + ", ".join(drops))
+
+    qualified = stats.get(STAGE_QUALIFIED, 0)
+    if qualified:
+        parts.append(f"1\uCC28 \uD1B5\uACFC {qualified}\uAC74")
+    parts.append(f"\uCD5C\uC885 \uC801\uD569 {deal_count}\uAC74")
+    return " \u00B7 ".join(parts)
 
 
 def _task_label(task: Tuple[str, str]) -> str:
@@ -131,6 +191,7 @@ def process_focus(config: FocusConfig) -> Tuple[List[Flight], Counter]:
         )
         return flights, stats
     except Exception as exc:
+        stats[FOCUS_SEARCH_FAILED] += 1
         logging.error("[FOCUS] FAILED: %s", exc)
         return [], stats
 
@@ -232,6 +293,7 @@ def run_system():
     all_final_flights: List[Flight] = []
     focus_flights: List[Flight] = []
     route_watch_flights: List[Flight] = []
+    focus_stats: Counter = Counter()
     funnel: Counter = Counter()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks)) as executor:
@@ -258,6 +320,7 @@ def run_system():
                 elif task == FOCUS_TASK:
                     flights, stats = result
                     focus_flights.extend(flights)
+                    focus_stats.update(stats)
                     funnel.update(stats)
                 else:
                     flights, stats = result
@@ -267,6 +330,16 @@ def run_system():
                 logging.error("[%s] thread error: %s", _task_label(task), exc)
 
     logging.info("FUNNEL (all tasks): " + format_funnel(funnel))
+
+    focus_label = ""
+    focus_status = ""
+    if user_intent and user_intent.kind == "focus":
+        focus_label = _focus_display_label(user_intent.config)
+        focus_status = _focus_status_text(
+            focus_stats,
+            len(focus_flights),
+            executed=FOCUS_TASK in tasks,
+        )
 
     carried = refresh_carryover_pool(state, all_final_flights)
     all_final_flights = merge_and_collapse(all_final_flights)
@@ -308,7 +381,8 @@ def run_system():
         KAKAO_JS_KEY,
         low_price_keys,
         focus_deals=focus_flights,
-        focus_label=user_intent.config.label if user_intent and user_intent.kind == "focus" else "",
+        focus_label=focus_label,
+        focus_status=focus_status,
         route_watch_deals=route_watch_flights,
         route_watch_label=user_intent.config.label if user_intent and user_intent.kind == "route" else "",
     )
@@ -321,6 +395,8 @@ def run_system():
         kakao_success = send_kakao_message(
             all_final_flights,
             focus_deals=focus_flights,
+            focus_label=focus_label,
+            focus_status=focus_status,
             route_watch_deals=route_watch_flights,
             route_watch_label=user_intent.config.label if user_intent and user_intent.kind == "route" else "",
         )
