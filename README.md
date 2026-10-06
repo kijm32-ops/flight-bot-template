@@ -445,6 +445,15 @@ GitHub may require the repository setting that allows GitHub Actions to create
 pull requests. If that permission is disabled, the workflow still pushes the
 update branch and prints a warning so the owner can open the PR manually.
 
+GitHub never lets the default `GITHUB_TOKEN` push changes under
+`.github/workflows`, and most PTIS updates touch workflow files. Starting with
+v1.10.4, when that push is rejected the workflow opens an issue titled
+**PTIS update vX.Y.Z needs a manual apply** instead of failing silently. Apply it
+locally with `python update_ptis.py --apply`, then commit and push. To make updates
+fully automatic, add a repository secret named `PTIS_UPDATE_TOKEN` containing a
+fine-grained personal access token for that repository with Contents, Pull requests
+and Workflows read/write access; the workflow uses it automatically when present.
+
 Repositories installed before v1.5 need a one-time bootstrap update to receive
 `update_ptis.py`, the manifest, version file, and update workflow. After that,
 normal updates use the same mechanism.

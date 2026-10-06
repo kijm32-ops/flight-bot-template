@@ -8,16 +8,21 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 jobs:
   update:
     if: github.repository != 'kijm32-ops/flight-bot'
     runs-on: ubuntu-latest
     steps:
+      # GITHUB_TOKEN can never push changes under .github/workflows. An optional
+      # PTIS_UPDATE_TOKEN (fine-grained PAT with Contents, Pull requests and
+      # Workflows write access) lets those updates reach the update branch.
       - name: Check out installed repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.PTIS_UPDATE_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -51,13 +56,45 @@ jobs:
           git switch -c "$branch"
           git add -A
           git commit -m "chore: update PTIS to v$version"
-          git push --force-with-lease origin "$branch"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          if git push --force-with-lease origin "$branch"; then
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Could not push $branch. Workflow-file changes need PTIS_UPDATE_TOKEN or a local update."
+          fi
 
-      - name: Open update pull request
-        if: steps.update.outputs.changed == 'true'
+      - name: Request manual update when push is blocked
+        if: steps.update.outputs.changed == 'true' && steps.commit.outputs.pushed == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PTIS_VERSION: ${{ steps.update.outputs.version }}
+        shell: bash
+        run: |
+          title="PTIS update v${PTIS_VERSION} needs a manual apply"
+          existing="$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            echo "Manual update issue #$existing is already open."
+            exit 0
+          fi
+
+          body="PTIS v${PTIS_VERSION} is available, but GitHub Actions cannot push updates that change .github/workflows with the default GITHUB_TOKEN, so no update branch or PR was created.
+
+          Apply it from a clean local clone (this keeps data/state.json, data/kakao_auth.json and user_config.json):
+
+              python update_ptis.py --apply
+              git add -A
+              git commit -m \"chore: update PTIS to v${PTIS_VERSION}\"
+              git push
+
+          Optional, to automate this in the future: add a repository secret named PTIS_UPDATE_TOKEN containing a fine-grained personal access token for this repository with Contents, Pull requests and Workflows read/write access."
+          gh issue create --title "$title" --body "$body" \
+            || echo "::warning::Could not create the manual update issue. Run python update_ptis.py --apply locally."
+
+      - name: Open update pull request
+        if: steps.update.outputs.changed == 'true' && steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PTIS_UPDATE_TOKEN || secrets.GITHUB_TOKEN }}
           UPDATE_BRANCH: ${{ steps.commit.outputs.branch }}
           PTIS_VERSION: ${{ steps.update.outputs.version }}
           BASE_BRANCH: ${{ github.event.repository.default_branch }}
