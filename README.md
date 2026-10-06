@@ -361,6 +361,11 @@ The direct form supports:
 - setting a region for a selected future month, stay range, and budget;
 - pausing every interest search without deleting the saved entries.
 
+The destination list includes China as a region search (`중국 전체 (China)`)
+and five exact-route airports: Shanghai (PVG), Beijing Capital (PEK),
+Beijing Daxing (PKX), Xi'an (XIY), and Qingdao (TAO). Beijing's airports are
+separate choices for exact routes.
+
 For an exact route, PTIS selects the Friday in the chosen week and calculates
 the return date from the selected stay. For a region search, PTIS searches the
 whole chosen month and turns the stay choice into a small range. Optional custom

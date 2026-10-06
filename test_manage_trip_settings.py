@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 from config import KST
 import config
+from focus import parse_focus_config
 from manage_trip_settings import (
     SettingsError,
     resolve_guided_inputs,
@@ -17,6 +18,7 @@ from manage_trip_settings import (
 from models import Flight
 import notifier
 import report_generator
+from route_watch import parse_route_watch_configs
 
 
 NOW = datetime(2026, 9, 22, 12, 0, tzinfo=KST)
@@ -56,6 +58,17 @@ def issue_event(sender="owner", custom_response="_No response_"):
 
 
 class ManageTripSettingsTests(unittest.TestCase):
+    def test_china_choices_are_present_in_issue_form(self):
+        form = Path(".github/ISSUE_TEMPLATE/trip-settings.yml").read_text(
+            encoding="utf-8"
+        )
+        for choice in (
+            "중국 전체 (China)", "상하이 (PVG)", "베이징 수도 (PEK)",
+            "베이징 다싱 (PKX)", "시안 (XIY)", "칭다오 (TAO)",
+        ):
+            with self.subTest(choice=choice):
+                self.assertIn(f'- "{choice}"', form)
+
     def sample_flight(self):
         return Flight(
             origin="ICN", destination="KIX", destination_name="Osaka",
@@ -99,6 +112,59 @@ class ManageTripSettingsTests(unittest.TestCase):
         self.assertEqual("2026-10-31", guided["outbound_to"])
         self.assertEqual("3", guided["stay_min"])
         self.assertEqual("5", guided["stay_max"])
+
+    def test_china_region_issue_choice_reaches_focus_query(self):
+        event = issue_event()
+        event["issue"]["body"] = event["issue"]["body"].replace(
+            "1. 정확한 여행 일정 추가", "3. 지역·기간 관심검색 설정"
+        ).replace("오사카 (KIX)", "중국 전체 (China)")
+        inputs = resolve_issue_event_inputs(event)
+        self.assertEqual("focus_set", inputs["operation"])
+        guided = resolve_guided_inputs(
+            inputs["operation"], inputs["destination_choice"],
+            inputs["travel_month"], inputs["departure_week"],
+            inputs["stay_option"], inputs["budget_option"], now=NOW,
+        )
+        self.assertEqual("China", guided["destination_or_region"])
+        result = update_settings(
+            base(), inputs["operation"], origin=inputs["origin"],
+            now=NOW, **guided,
+        )
+        self.assertEqual("China", result["focus_search"]["region"])
+        focus = parse_focus_config(result, now=NOW)
+        self.assertEqual("China, 4 to 6 day trip", focus.search_params()["query"])
+
+    def test_china_airport_choices_reach_route_watch_params(self):
+        choices = {
+            "상하이 (PVG)": "PVG",
+            "베이징 수도 (PEK)": "PEK",
+            "베이징 다싱 (PKX)": "PKX",
+            "시안 (XIY)": "XIY",
+            "칭다오 (TAO)": "TAO",
+            "오사카 (KIX)": "KIX",
+        }
+        for choice, code in choices.items():
+            with self.subTest(choice=choice):
+                guided = resolve_guided_inputs(
+                    "exact_add", choice, "next_2", "week_2", "4", "0", now=NOW,
+                )
+                self.assertEqual(code, guided["destination_or_region"])
+                result = update_settings(
+                    base(), "exact_add", origin="ICN", now=NOW, **guided,
+                )
+                route = parse_route_watch_configs(result, now=NOW)[0]
+                self.assertEqual(code, route.search_params()["arrival_id"])
+
+    def test_existing_region_choices_remain_unchanged(self):
+        for choice, region in (
+            ("일본 전체 (Japan)", "Japan"),
+            ("동남아 전체 (Southeast Asia)", "Southeast Asia"),
+        ):
+            with self.subTest(choice=choice):
+                guided = resolve_guided_inputs(
+                    "focus_set", choice, "next_1", "week_2", "3", "0", now=NOW,
+                )
+                self.assertEqual(region, guided["destination_or_region"])
 
     def test_custom_guided_values_override_choices(self):
         guided = resolve_guided_inputs(
