@@ -436,7 +436,7 @@ working tree before changing files. Review `git diff --cached` before committing
 
 ### Update pull requests
 
-Installed repositories that already contain v1.5 run **PTIS Update Check** weekly
+Installed repositories that already contain v1.5 run **PTIS Update Check** (daily from v1.10.4)
 and can also run it manually from Actions. When a newer PTIS version exists, the
 workflow creates an update branch and attempts to open a pull request. Nothing is
 merged automatically.
@@ -453,6 +453,11 @@ locally with `python update_ptis.py --apply`, then commit and push. To make upda
 fully automatic, add a repository secret named `PTIS_UPDATE_TOKEN` containing a
 fine-grained personal access token for that repository with Contents, Pull requests
 and Workflows read/write access; the workflow uses it automatically when present.
+
+For fully hands-off updates, also create the repository variable `PTIS_AUTO_MERGE`
+with the value `true` (Settings > Secrets and variables > Actions > Variables). With
+`PTIS_UPDATE_TOKEN` present, the workflow then waits for **Validate PTIS** to pass on
+the update PR and squash-merges it; a failing check leaves the PR open for review.
 
 Repositories installed before v1.5 need a one-time bootstrap update to receive
 `update_ptis.py`, the manifest, version file, and update workflow. After that,
