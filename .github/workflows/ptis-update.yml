@@ -3,21 +3,26 @@ name: PTIS Update Check
 on:
   workflow_dispatch:
   schedule:
-    - cron: '23 1 * * 1'
+    - cron: '23 1 * * *'
 
 permissions:
   contents: write
   pull-requests: write
+  issues: write
 
 jobs:
   update:
     if: github.repository != 'kijm32-ops/flight-bot'
     runs-on: ubuntu-latest
     steps:
+      # GITHUB_TOKEN can never push changes under .github/workflows. An optional
+      # PTIS_UPDATE_TOKEN (fine-grained PAT with Contents, Pull requests and
+      # Workflows write access) lets those updates reach the update branch.
       - name: Check out installed repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.PTIS_UPDATE_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -51,13 +56,45 @@ jobs:
           git switch -c "$branch"
           git add -A
           git commit -m "chore: update PTIS to v$version"
-          git push --force-with-lease origin "$branch"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          if git push --force-with-lease origin "$branch"; then
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Could not push $branch. Workflow-file changes need PTIS_UPDATE_TOKEN or a local update."
+          fi
 
-      - name: Open update pull request
-        if: steps.update.outputs.changed == 'true'
+      - name: Request manual update when push is blocked
+        if: steps.update.outputs.changed == 'true' && steps.commit.outputs.pushed == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PTIS_VERSION: ${{ steps.update.outputs.version }}
+        shell: bash
+        run: |
+          title="PTIS update v${PTIS_VERSION} needs a manual apply"
+          existing="$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')"
+          if [ -n "$existing" ]; then
+            echo "Manual update issue #$existing is already open."
+            exit 0
+          fi
+
+          body="PTIS v${PTIS_VERSION} is available, but GitHub Actions cannot push updates that change .github/workflows with the default GITHUB_TOKEN, so no update branch or PR was created.
+
+          Apply it from a clean local clone (this keeps data/state.json, data/kakao_auth.json and user_config.json):
+
+              python update_ptis.py --apply
+              git add -A
+              git commit -m \"chore: update PTIS to v${PTIS_VERSION}\"
+              git push
+
+          Optional, to automate this in the future: add a repository secret named PTIS_UPDATE_TOKEN containing a fine-grained personal access token for this repository with Contents, Pull requests and Workflows read/write access."
+          gh issue create --title "$title" --body "$body" \
+            || echo "::warning::Could not create the manual update issue. Run python update_ptis.py --apply locally."
+
+      - name: Open update pull request
+        if: steps.update.outputs.changed == 'true' && steps.commit.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PTIS_UPDATE_TOKEN || secrets.GITHUB_TOKEN }}
           UPDATE_BRANCH: ${{ steps.commit.outputs.branch }}
           PTIS_VERSION: ${{ steps.update.outputs.version }}
           BASE_BRANCH: ${{ github.event.repository.default_branch }}
@@ -77,4 +114,30 @@ jobs:
           if ! gh pr create             --base "$BASE_BRANCH"             --head "$UPDATE_BRANCH"             --title "Update PTIS to v${PTIS_VERSION}"             --body "$body"; then
             echo "::warning::The update branch was pushed, but GitHub Actions could not create the PR."
             echo "::warning::Open a pull request from $UPDATE_BRANCH into $BASE_BRANCH manually."
+          fi
+
+      # Opt-in: set repository variable PTIS_AUTO_MERGE=true and add PTIS_UPDATE_TOKEN.
+      # PRs opened with the default GITHUB_TOKEN do not trigger Validate PTIS, so a
+      # token is required for the validation gate. The merge waits for that check.
+      - name: Merge update pull request after validation
+        if: steps.update.outputs.changed == 'true' && steps.commit.outputs.pushed == 'true' && vars.PTIS_AUTO_MERGE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PTIS_UPDATE_TOKEN }}
+          UPDATE_BRANCH: ${{ steps.commit.outputs.branch }}
+        shell: bash
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::PTIS_AUTO_MERGE is on but PTIS_UPDATE_TOKEN is missing; leaving the PR for manual merge."
+            exit 0
+          fi
+          pr="$(gh pr list --state open --head "$UPDATE_BRANCH" --json number --jq '.[0].number // empty')"
+          if [ -z "$pr" ]; then
+            echo "::warning::No open update PR found; nothing to merge."
+            exit 0
+          fi
+          sleep 20
+          if timeout 600 gh pr checks "$pr" --watch --fail-fast; then
+            gh pr merge "$pr" --squash --delete-branch               || echo "::warning::Auto-merge of PR #$pr failed; merge it manually."
+          else
+            echo "::warning::Validation did not pass for PR #$pr; leaving it open for review."
           fi
