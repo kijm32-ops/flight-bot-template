@@ -24,10 +24,10 @@
 Claude 구독은 Chat, Cowork, Claude Code가 **하나의 주간 사용 한도를 공유**한다. 따라서 Claude 계열에서는 `CHAT`도 사용량 절약 대상이며 `WORK / CODEX`와 같은 프로필(5절)을 쓴다. 4절의 "Chat profile"과 "completion-first" 전제는 OpenAI 계열 전용이다.
 
 - Claude Code 세션은 `CODEX`, Cowork는 `WORK`, claude.ai 채팅은 `CHAT` 역할이다.
-- 계층 번호는 위 GPT 계층과 동일하게 적용하며 모델 이름만 바꾼다.
+- 계층 번호(1~4)는 **각 계열 안에서의 상대 순위**다(1이 가장 가볍고 저렴하며 4가 가장 강하다). 아래 표는 GPT 모델과 Claude 모델이 동급이라는 뜻이 아니다. 같은 번호를 같은 행에 놓은 것은 라우팅 규칙(점수 구간, 승격·강등, fallback)을 두 계열에 같은 방식으로 적용하기 위한 편의일 뿐이다. 한 계열의 모델을 다른 계열의 모델로 대체하거나 성능을 비교하는 근거로 쓰지 않는다.
 - 채팅에서 모델 선택기를 에이전트가 바꿀 수는 없다. 권장 프로필을 안내하고 전환했다고 가정하지 않는다. 확장 사고 끔은 `LOW`, 켬은 `MEDIUM` 이상으로 기록한다.
 
-| 계층 | GPT | Claude |
+| 계층 (계열 안의 순위) | GPT | Claude |
 |---|---|---|
 | 1 | GPT-5.6 Luna | Claude Haiku 4.5 |
 | 2 | GPT-5.6 Terra | Claude Sonnet 5.5 |
@@ -215,3 +215,14 @@ ESCALATION_COUNT: 0..
 `REASONING: N/A`는 선택 모델이 권장 모델과 같거나 더 높은 경우에만 허용한다. 권장 모델보다 낮은 모델을 사용하면서 reasoning 수준으로 capability floor를 보완해야 하는 fallback에는 `N/A`를 사용할 수 없다.
 
 실제 UI에서 모델을 변경할 수 없는 에이전트는 스스로 변경했다고 주장하지 않는다. 권장 프로필과 현재 프로필이 다르면 차이를 기록하고, 역할 또는 모델 변경이 필요한 지점에서 handoff 한다.
+
+## 9. Executor and unlisted models
+
+`SESSION_STATE.md`에는 실행자(제품/도구), 역할(`ROLE`), 모델(`MODEL`)을 각각 구분해서 기록한다. 셋을 하나로 섞어 쓰지 않는다.
+
+- `EXECUTOR`(선택): 제품/도구 이름. 예: `Codex`, `Claude Code`. `Claude Code`는 제품 이름이고 `CODEX`는 역할 이름이므로 같은 개념이 아니다. `gate`는 이 값을 검사하지 않는다.
+- `MODEL`에는 그 세션에서 실제로 확인된 모델명만 기록한다. 추정하거나 이전 세션 기록을 재사용하지 않는다. `REASONING`도 실제 선택값을 확인할 수 있을 때만 쓰고, 아니면 `N/A`로 기록한다.
+- 모델이 위 카탈로그(GPT, Claude)에 없으면 이름을 그대로 기록한다. `gate`는 모델 비교를 건너뛰고 경고만 하며, 이 이유만으로 작업을 멈추지 않는다. 별도의 `MODEL_TIER` 표시는 쓰지 않는다. 이전 문서의 `MODEL_TIER: EXTERNAL|UNMAPPED` 표기는 더 이상 필요하지 않다.
+- 카탈로그에 없는 모델에는 6절의 승격 경로를 적용하지 않는다. 같은 원인으로 반복 실패하면 `AI_HARNESS.md` 8절의 자동 수리 루프 한도에 따라 중단하고 사용자에게 보고한다.
+- 어떤 모델도 근거 없이 다른 계열의 모델과 동급으로 취급하지 않는다. 동급 관계가 필요하면 이 문서에 그 관계를 명시한 결정을 추가한 뒤에만 쓴다. Claude catalog의 계층 번호는 이런 동급 결정이 아니다.
+- 역할, 환경, 안전, 검증 게이트는 모델 등록 여부와 무관하게 동일하게 적용한다. 대상은 `.ai/ROLE_POLICY.md`, `.ai/ENVIRONMENTS.md`, `AI_HARNESS.md`의 위험 분류와 실행 게이트, `.ai/SAFETY.md`, `.ai/VALIDATION.md`다.

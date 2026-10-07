@@ -3,6 +3,8 @@
 
 Claude Code 세션은 `ROLE: CODEX`이며 계열은 Claude다. 프로필 계산에는 `HARNESS_PROVIDER=claude`를 사용한다.
 
+`Claude Code`는 제품/도구 이름이고 `CODEX`는 `.ai/ROLE_POLICY.md`가 정의하는 실행 범위(역할) 이름이다. 둘은 같은 개념이 아니다. 로컬 파일을 직접 읽고 수정하며 명령을 실행하는 범위가 `CODEX` 역할과 일치하므로 새 역할명을 만들지 않는다. `SESSION_STATE.md`에는 실행자(`EXECUTOR`, 선택), 역할(`ROLE`), 모델(`MODEL`)을 각각 구분해 기록한다.
+
 이 파일은 `CLAUDE.md`를 통해 세션 시작 시 자동으로 읽힌다. 사용자가 하네스를 언급하지 않아도 `AGENTS.md`의 자동 부트스트랩을 따라, 첫 파일 수정이나 명령 실행 전에 `SESSION_STATE.md`의 프로필을 확정하고 `gate`를 실행한다.
 
 Chat, Cowork, Claude Code는 **하나의 주간 사용 한도를 공유**한다. 모든 단계에서 사용량을 절약하되, 필요한 사고와 검증은 생략하지 않는다.

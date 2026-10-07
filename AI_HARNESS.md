@@ -133,6 +133,15 @@ Chat처럼 로컬 Harness CLI를 실행할 수 없지만 원격 저장소 도구
 - placeholder가 실제 실행 경로에 남아 있으면 실행하지 않는다.
 - `CODEX`는 확정된 아키텍처 변경이 필요해지면 `.ai/ROLE_POLICY.md`의 `BLOCKED_BY_DESIGN` 규칙을 따른다.
 
+### Text integrity invariant
+
+- 사람이 읽는 파일명, 디렉터리명, 문서, 데이터, 코드의 사용자 표시 문자열은 정상 Unicode로 보존하며 mojibake 또는 손상된 문자 인코딩을 허용하지 않는다.
+- 새로 생성하거나 수정하는 텍스트는 UTF-8을 기본으로 한다. 프로젝트가 다른 인코딩을 명시적으로 요구한다면 그 계약을 우선하되, 사람이 읽는 결과가 손상되지 않았음을 검증한다.
+- U+FFFD replacement character, 잘못된 UTF-8, 또는 신뢰성 있게 역변환 가능한 mojibake를 발견하면 완료 전에 복구한다.
+- 원문을 확정할 수 없는 깨진 문자열을 임의의 한국어 문구로 추측해 덮어쓰지 않는다. 복구 근거가 부족하면 해당 항목과 필요한 원본을 명시한다.
+- 최종 `verify`의 문자 무결성 검사는 hard fail이다. 기존 오염 프로젝트를 수리할 수 있도록 작업 시작용 `gate`는 이 검사를 실행하지 않는다.
+- dependency, cache, build 산출물과 binary 파일은 기본 검사 대상에서 제외하고 사람이 관리하는 Git tracked 및 relevant untracked 텍스트를 우선 검사한다.
+
 ### CHAT autonomous continuation
 
 - 현재 도구로 가능한 작업은 `SUCCESS / BLOCKED / NEEDS_USER` 중 하나가 될 때까지 계속한다.
