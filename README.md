@@ -438,8 +438,9 @@ working tree before changing files. Review `git diff --cached` before committing
 
 Installed repositories that already contain v1.5 run **PTIS Update Check** (daily from v1.10.4)
 and can also run it manually from Actions. When a newer PTIS version exists, the
-workflow creates an update branch and attempts to open a pull request. Nothing is
-merged automatically.
+workflow creates an update branch and attempts to open a pull request. By default
+nothing is merged automatically; see
+[Fully automatic updates](#fully-automatic-updates) to turn that on.
 
 GitHub may require the repository setting that allows GitHub Actions to create
 pull requests. If that permission is disabled, the workflow still pushes the
@@ -462,6 +463,46 @@ the update PR and squash-merges it; a failing check leaves the PR open for revie
 Repositories installed before v1.5 need a one-time bootstrap update to receive
 `update_ptis.py`, the manifest, version file, and update workflow. After that,
 normal updates use the same mechanism.
+
+### Fully automatic updates
+
+Automatic merging is off until both of these exist in **your own** installed
+repository (they are repository settings, not files, so no update can create or
+overwrite them):
+
+1. **Secret `PTIS_UPDATE_TOKEN`** — a fine-grained personal access token limited to
+   this one repository with Repository permissions **Contents**, **Pull requests**
+   and **Workflows** set to Read and write. Create it at
+   GitHub > Settings > Developer settings > Personal access tokens > Fine-grained
+   tokens, and pick an expiry you will remember (a new token is needed when it
+   expires). Store it with the prompt below so the value is never typed on a
+   command line or pasted into chat:
+
+   ```bash
+   gh secret set PTIS_UPDATE_TOKEN --repo <your-account>/<your-ptis-repo>
+   ```
+
+2. **Variable `PTIS_AUTO_MERGE`** with the value `true`:
+
+   ```bash
+   gh variable set PTIS_AUTO_MERGE --body true --repo <your-account>/<your-ptis-repo>
+   ```
+
+Check that it works:
+
+- Actions > **PTIS Update Check** > Run workflow. With nothing new it ends green
+  without opening a PR.
+- When a new PTIS version exists, the run opens a PR, waits for **Validate PTIS**,
+  squash-merges it and deletes the update branch. A failing check leaves the PR open.
+- An open issue titled **PTIS update vX.Y.Z needs a manual apply** means the token is
+  missing or lacks Workflows access; fix the token or apply locally.
+
+Security note: automatic merging runs program code from the upstream repository
+(`kijm32-ops/flight-bot`, branch `main`) in your repository, where your Secrets such
+as the SerpAPI key are available. Validation checks that the code compiles and its
+tests pass; it does not review what the code does. Only enable it if you trust the
+upstream maintainer, and revoke `PTIS_UPDATE_TOKEN` or set `PTIS_AUTO_MERGE` to
+`false` to stop.
 
 ## Development validation
 
