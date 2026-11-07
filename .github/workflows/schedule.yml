@@ -2,8 +2,10 @@ name: Daily Flight Deal Scraper
 
 on:
   schedule:
-    # UTC 22:00 = KST 익일 07:00 (UTC 금 22시 = KST 토 07시 → 심층 검색일)
-    - cron: '0 22 * * *'
+    # UTC 19:00 = KST 익일 04:00. GitHub 예약 실행은 보통 2~4시간 지연되어(최근 실측
+    # 09:15~10:59 KST 시작) 실제로는 KST 07시 안팎에 도착한다.
+    # 실행 시점 기준 KST 날짜(요일·로테이션)는 이전과 동일하다.
+    - cron: '0 19 * * *'
   workflow_dispatch:
     inputs:
       force_deep_scan:
