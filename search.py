@@ -1,11 +1,25 @@
 import requests
 import logging
 from typing import Dict, Any, List
+from urllib.parse import quote_plus
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 
 
 class APIFetchError(Exception):
     pass
+
+
+def _redact(text: Any, api_key: str) -> str:
+    """Remove the API key from an error message.
+
+    requests puts the full request URL, query string included, in its error
+    text, so logging it as-is would print the SerpApi key.
+    """
+    text = str(text)
+    for secret in {api_key, quote_plus(api_key or "")}:
+        if secret:
+            text = text.replace(secret, "***")
+    return text
 
 
 # 최대 3회 재시도 (대기 시간: 2초 -> 4초 -> 8초)
@@ -28,8 +42,9 @@ def fetch_raw_flight_deals(api_key: str, base_params: Dict[str, Any], origin: st
         logging.info(f"[{origin}] {len(deals)}건 수신")
         return deals
     except requests.exceptions.RequestException as e:
-        logging.error(f"[{origin}] ❌ API 호출 에러: {e}")
-        raise APIFetchError(f"API Fetch Failed for {origin}: {e}")
+        reason = _redact(e, api_key)
+        logging.error(f"[{origin}] ❌ API 호출 에러: {reason}")
+        raise APIFetchError(f"API Fetch Failed for {origin}: {reason}") from None
 
 
 @retry(
@@ -60,7 +75,8 @@ def fetch_google_flights(api_key: str, params: Dict[str, Any]) -> Dict[str, Any]
         )
         return data
     except requests.exceptions.RequestException as exc:
-        logging.error("[%s] google_flights API error: %s", label, exc)
+        reason = _redact(exc, api_key)
+        logging.error("[%s] google_flights API error: %s", label, reason)
         raise APIFetchError(
-            f"Google Flights fetch failed for {label}: {exc}"
-        )
+            f"Google Flights fetch failed for {label}: {reason}"
+        ) from None
