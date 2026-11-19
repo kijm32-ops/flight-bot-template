@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# MANAGED BY AI-HARNESS
+set -euo pipefail
+
+COMMAND="${1:-verify}"
+if [[ $# -gt 0 ]]; then shift; fi
+ARGS=("$@")
+PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+HARNESS_HOME="$HOME/ai-harness"
+HARNESS_SCRIPT="$HARNESS_HOME/scripts/harness"
+REPO_URL="https://github.com/kijm32-ops/ai-harness.git"
+
+ensure_git() {
+  command -v git >/dev/null 2>&1 || {
+    echo "Git is required but was not found in PATH." >&2
+    exit 1
+  }
+}
+
+ensure_harness() {
+  ensure_git
+  if [[ ! -d "$HARNESS_HOME" ]]; then
+    echo "Harness not found. Cloning to $HARNESS_HOME"
+    git clone "$REPO_URL" "$HARNESS_HOME"
+  fi
+  if [[ ! -f "$HARNESS_SCRIPT" ]]; then
+    echo "Harness script not found: $HARNESS_SCRIPT" >&2
+    exit 1
+  fi
+}
+
+update_harness() {
+  ensure_harness
+  git -C "$HARNESS_HOME" pull --ff-only
+}
+
+case "${COMMAND,,}" in
+  setup)
+    ensure_harness
+    update_harness
+    if [[ -f "$PROJECT_ROOT/SESSION_STATE.md" ]]; then
+      "$HARNESS_SCRIPT" upgrade "$PROJECT_ROOT"
+    else
+      "$HARNESS_SCRIPT" init "$PROJECT_ROOT"
+    fi
+    ;;
+  update)
+    update_harness
+    ;;
+  *)
+    ensure_harness
+    "$HARNESS_SCRIPT" "$COMMAND" "$PROJECT_ROOT" "${ARGS[@]}"
+    ;;
+esac
